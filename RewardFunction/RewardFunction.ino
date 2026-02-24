@@ -74,12 +74,12 @@ float Reward(){
 }
 
 void loop() {
-  // Update pitch every 5ms
+  // Update pitch every 1ms
   if (millis() - lastPitchTime >= 1) {
     updatePitch();
   }
 
-  // Run servo sequence every 200ms
+  // Run servo sequence every 1000ms
   if (millis() - lastServoTime >= 1000) {
     lastServoTime = millis();
 
