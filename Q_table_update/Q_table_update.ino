@@ -22,6 +22,10 @@ float Q[total_actions][secondary_arm_discete_positions][primary_arm_discrete_pos
 float discount_factor = 0.9; // discount factor
 float learn_rate = 0.01; //learn rate
 
+//training stuff
+bool training = true;
+unsigned long trainingStart = 0;  
+
 
 struct State {
   int row;
@@ -76,6 +80,7 @@ void setup() {
   servo_secondary.attach(3);
   lastPitchTime = millis();
   lastServoTime = millis();
+  trainingStart = millis();
 
   
 }
@@ -114,8 +119,8 @@ StepStruct Step(State currentState, int action ) {
 ServoPositions ConvertStateToServoPosition(State state){
   ServoPositions servoPosition;
   
-  servoPosition.primaryArmPosition = state.col * 30;
-  servoPosition.secondaryArmPosition = state.row * 30;
+  servoPosition.primaryArmPosition = max(state.col * 30, 15);
+  servoPosition.secondaryArmPosition = max(min(state.row * 30, 160), 15);
 
   return servoPosition;
 }
@@ -171,8 +176,7 @@ int freeRam() {
 }
 
 
-bool training = true;
-unsigned long trainingStart = 0;  
+
 
 void loop() {
 
@@ -202,7 +206,7 @@ void loop() {
 
       int next_action = 0;
       float best = -999;
-      for (int a = 0; a < 12; a++) {
+      for (int a = 0; a < 11; a++) {
         if (Q[a][nextState.row][nextState.col] > best) {
           best = Q[a][nextState.row][nextState.col];
           next_action = a;
@@ -219,7 +223,7 @@ void loop() {
       // --- GREEDY POLICY ---
       int best_action = 0;
       float best = -999;
-      for (int a = 0; a < 12; a++) {
+      for (int a = 0; a < 11; a++) {
         if (Q[a][state.row][state.col] > best) {
           best = Q[a][state.row][state.col];
           best_action = a;
