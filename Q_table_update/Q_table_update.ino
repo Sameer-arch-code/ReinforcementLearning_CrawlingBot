@@ -13,9 +13,14 @@ unsigned long lastServoTime = 0;
 int servoStep = 0;
 int ms_delay_to_capture_accel = 50;
 
-int primary_arm_discrete_positions = 4;
-int secondary_arm_discete_positions = 7;
-int total_actions = primary_arm_discrete_positions + secondary_arm_discete_positions;
+constexpr int primary_arm_discrete_positions = 4;
+constexpr int secondary_arm_discete_positions = 7;
+constexpr int total_actions = primary_arm_discrete_positions + secondary_arm_discete_positions;
+
+//Q stuff
+float Q[total_actions][secondary_arm_discete_positions][primary_arm_discrete_positions] = {0.0};//the Q table defined as [layer][row][col]
+float discount_factor = 0.9; // discount factor
+float learn_rate = 0.01; //learn rate
 
 
 struct State {
@@ -47,7 +52,7 @@ void setup() {
   randomSeed(seed);
   //seed stuff ends
   
-  int Q[total_actions][secondary_arm_discete_positions][primary_arm_discrete_positions] = {0}; //the Q table defined as [layer][row][col]
+  
 
   initialState = {random(0, 7), random(0, 4)};
   
@@ -159,7 +164,19 @@ void updatePitch() {
   pitch = 0.96 * (pitch + g.gyro.y * dt * 180 / PI) + 0.04 * pitchAcc;
 }
 
+int freeRam() {
+  extern int __heap_start, *__brkval;
+  int v;
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
+}
+
+
+bool training = true;
+unsigned long trainingStart = 0;  
+
 void loop() {
+
+  
 
   // Update pitch every 1ms
   if (millis() - lastPitchTime >= 1) {
@@ -170,15 +187,50 @@ void loop() {
   if (millis() - lastServoTime >= 750) {
     lastServoTime = millis();
 
-    
+    // Check if 5 minutes passed
+    if (millis() - trainingStart >= 15UL * 60UL * 1000UL) {
+      training = false;
+    }
 
-    int action = PolicyRandom();
-    Serial.print("action:  "); Serial.println(action);
-    
+    if (training) {
+      // --- TRAINING ---
+      int action = PolicyRandom();
 
-    StepStruct step = Step(state, action);
-    state = step.nextState;
-    Serial.print("next state: "); Serial.print(state.row); Serial.print(","); Serial.print(state.col);
-    Serial.print("  |   reward:  "); Serial.println(step.reward); Serial.println("___________________________________________________________");
+      StepStruct step = Step(state, action);
+
+      State nextState = step.nextState;  
+
+      int next_action = 0;
+      float best = -999;
+      for (int a = 0; a < 12; a++) {
+        if (Q[a][nextState.row][nextState.col] > best) {
+          best = Q[a][nextState.row][nextState.col];
+          next_action = a;
+        }
+      }
+
+  
+      Q[action][state.row][state.col] += learn_rate * (step.reward + discount_factor * Q[next_action][nextState.row][nextState.col] - Q[action][state.row][state.col]);
+      Serial.print("training in progress. Q table updated.  "); Serial.print((15UL * 60UL * 1000UL - millis())/ 60000); Serial.println("  minutes left");
+      state = nextState;
+      Serial.print("Ram left:   "); Serial.println(freeRam());
+
+    } else {
+      // --- GREEDY POLICY ---
+      int best_action = 0;
+      float best = -999;
+      for (int a = 0; a < 12; a++) {
+        if (Q[a][state.row][state.col] > best) {
+          best = Q[a][state.row][state.col];
+          best_action = a;
+        }
+      }
+
+      StepStruct step = Step(state, best_action);
+      state = step.nextState;
+      Serial.println("Executing greedy policy  ");
+      Serial.print("Ram left:   "); Serial.println(freeRam());
+    }
   }
 }
+
