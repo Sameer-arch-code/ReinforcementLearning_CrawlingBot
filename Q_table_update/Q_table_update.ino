@@ -26,6 +26,8 @@ float learn_rate = 0.01; //learn rate
 bool training = true;
 unsigned long trainingStart = 0;  
 
+bool forward = true;
+
 
 struct State {
   int row;
@@ -81,20 +83,21 @@ void setup() {
   lastPitchTime = millis();
   lastServoTime = millis();
   trainingStart = millis();
+  Serial.print("trainingStart: "); Serial.println(trainingStart);
 
   
 }
 
 int PolicyRandom() {
-  return random(1, 12);
+  return random(0, 11);
 }
 
 StepStruct Step(State currentState, int action ) {
   StepStruct result;
   ServoPositions servoPosition;
 
-  if (action < primary_arm_discrete_positions+1) {
-    result.nextState = {currentState.row, action - 1};
+  if (action < primary_arm_discrete_positions) {
+    result.nextState = {currentState.row, action};
     servoPosition = ConvertStateToServoPosition(result.nextState);
 
     servo_primary.write(servoPosition.primaryArmPosition);
@@ -103,7 +106,7 @@ StepStruct Step(State currentState, int action ) {
     result.reward = Reward();
   }
   else{
-    result.nextState = {action - (primary_arm_discrete_positions+1), currentState.col};
+    result.nextState = {action - primary_arm_discrete_positions, currentState.col};
     servoPosition = ConvertStateToServoPosition(result.nextState);
     
     
@@ -120,7 +123,7 @@ ServoPositions ConvertStateToServoPosition(State state){
   ServoPositions servoPosition;
   
   servoPosition.primaryArmPosition = max(state.col * 30, 15);
-  servoPosition.secondaryArmPosition = max(min(state.row * 30, 160), 15);
+  servoPosition.secondaryArmPosition = max(min(state.row * 30, 170), 20);
 
   return servoPosition;
 }
@@ -193,6 +196,8 @@ void loop() {
 
     // Check if 5 minutes passed
     if (millis() - trainingStart >= 15UL * 60UL * 1000UL) {
+      // Serial.print("----------------------------------------------------------------------------------------millis:    "); 
+      // Serial.println(millis()); Serial.print(15UL * 60UL * 1000UL);Serial.print("   is lesser than  : ");Serial.print(millis() - trainingStart);
       training = false;
     }
 
@@ -205,13 +210,26 @@ void loop() {
       State nextState = step.nextState;  
 
       int next_action = 0;
-      float best = -999;
-      for (int a = 0; a < 11; a++) {
-        if (Q[a][nextState.row][nextState.col] > best) {
-          best = Q[a][nextState.row][nextState.col];
-          next_action = a;
+
+      if (forward){
+        float best = 999;
+        for (int a = 0; a < 11; a++) {
+          if (Q[a][nextState.row][nextState.col] < best) {
+            best = Q[a][nextState.row][nextState.col];
+            next_action = a;
+          }
         }
       }
+      else{
+        float best = -999;
+        for (int a = 0; a < 11; a++) {
+          if (Q[a][nextState.row][nextState.col] > best) {
+            best = Q[a][nextState.row][nextState.col];
+            next_action = a;
+          }
+        }
+      }
+      
 
   
       Q[action][state.row][state.col] += learn_rate * (step.reward + discount_factor * Q[next_action][nextState.row][nextState.col] - Q[action][state.row][state.col]);
@@ -221,19 +239,40 @@ void loop() {
 
     } else {
       // --- GREEDY POLICY ---
-      int best_action = 0;
-      float best = -999;
-      for (int a = 0; a < 11; a++) {
-        if (Q[a][state.row][state.col] > best) {
-          best = Q[a][state.row][state.col];
-          best_action = a;
+
+      if (forward){
+        int best_action = 0;
+        float best = 999;
+        for (int a = 0; a < 11; a++) {
+          if (Q[a][state.row][state.col] < best) {
+            best = Q[a][state.row][state.col];
+            best_action = a;
+          }
         }
+
+        StepStruct step = Step(state, best_action);
+        state = step.nextState;
+        Serial.println("Executing greedy policy  ");
+        Serial.print("Ram left:   "); Serial.println(freeRam());
+
+        }
+
+      else{
+        int best_action = 0;
+        float best = -999;
+        for (int a = 0; a < 11; a++) {
+          if (Q[a][state.row][state.col] > best) {
+            best = Q[a][state.row][state.col];
+            best_action = a;
+          }
       }
 
       StepStruct step = Step(state, best_action);
       state = step.nextState;
       Serial.println("Executing greedy policy  ");
       Serial.print("Ram left:   "); Serial.println(freeRam());
+      }
+      
     }
   }
 }
