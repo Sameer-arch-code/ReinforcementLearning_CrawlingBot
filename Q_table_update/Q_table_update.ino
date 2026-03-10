@@ -13,8 +13,10 @@ unsigned long lastServoTime = 0;
 int servoStep = 0;
 int ms_delay_to_capture_accel = 50;
 
-constexpr int primary_arm_discrete_positions = 4;
-constexpr int secondary_arm_discete_positions = 7;
+
+//state space and action space definition
+constexpr int primary_arm_discrete_positions = 4;  //clipped between 15 and 90 degree
+constexpr int secondary_arm_discete_positions = 7;  //clipped between 20 and 170 degree
 constexpr int total_actions = primary_arm_discrete_positions + secondary_arm_discete_positions;
 
 //Q stuff
@@ -25,8 +27,9 @@ float learn_rate = 0.01; //learn rate
 //training stuff
 bool training = true;
 unsigned long trainingStart = 0;  
+unsigned long trainingTime = 7;
 
-bool forward = true;
+bool forward = false;
 
 
 struct State {
@@ -122,8 +125,8 @@ StepStruct Step(State currentState, int action ) {
 ServoPositions ConvertStateToServoPosition(State state){
   ServoPositions servoPosition;
   
-  servoPosition.primaryArmPosition = max(state.col * 30, 15);
-  servoPosition.secondaryArmPosition = max(min(state.row * 30, 170), 20);
+  servoPosition.primaryArmPosition = max(state.col * (90/(primary_arm_discrete_positions-1)), 15);
+  servoPosition.secondaryArmPosition = max(min(state.row * (180/(secondary_arm_discete_positions-1)), 170), 20);
 
   return servoPosition;
 }
@@ -195,9 +198,9 @@ void loop() {
     lastServoTime = millis();
 
     // Check if 5 minutes passed
-    if (millis() - trainingStart >= 15UL * 60UL * 1000UL) {
-      // Serial.print("----------------------------------------------------------------------------------------millis:    "); 
-      // Serial.println(millis()); Serial.print(15UL * 60UL * 1000UL);Serial.print("   is lesser than  : ");Serial.print(millis() - trainingStart);
+    if (millis() - trainingStart >= trainingTime * 60UL * 1000UL) {
+      Serial.print("----------------------------------------------------------------------------------------millis:    "); 
+      Serial.println(millis()); Serial.print(15UL * 60UL * 1000UL);Serial.print("   is lesser than  : ");Serial.print(millis() - trainingStart);
       training = false;
     }
 
@@ -233,7 +236,7 @@ void loop() {
 
   
       Q[action][state.row][state.col] += learn_rate * (step.reward + discount_factor * Q[next_action][nextState.row][nextState.col] - Q[action][state.row][state.col]);
-      Serial.print("training in progress. Q table updated.  "); Serial.print((15UL * 60UL * 1000UL - millis())/ 60000); Serial.println("  minutes left");
+      Serial.print("training in progress. Q table updated.  "); Serial.print((trainingTime * 60UL * 1000UL - (millis() - trainingStart)) / 60000UL); Serial.println("  minutes left");
       state = nextState;
       Serial.print("Ram left:   "); Serial.println(freeRam());
 
