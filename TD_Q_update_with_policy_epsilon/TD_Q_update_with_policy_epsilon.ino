@@ -29,6 +29,10 @@ bool training = true;
 unsigned long trainingStart = 0;  
 unsigned long trainingTime = 7;
 
+float epsilon = 1.0;
+float epsilon_min = 0.05;
+float epsilon_decay = 0.999;
+
 bool forward = false;
 
 
@@ -93,6 +97,15 @@ void setup() {
 
 int PolicyRandom() {
   return random(0, total_actions);
+}
+
+int PolicyEpsilon(State currentState, float epsilon){
+  if (random(0, 100) < epsilon * 100) {
+    return PolicyRandom();
+  }
+  else {
+    return forward ? find_best_forward_action(currentState) : find_best_backward_action(currentState);
+  }
 }
 
 StepStruct Step(State currentState, int action ) {
@@ -181,7 +194,11 @@ int freeRam() {
   return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
 }
 
+
+
+
 int find_best_forward_action(State s) {
+    //finds action with lowest reward
     int best_action = 0;
     float best = 9999;
     for (int a = 0; a < total_actions; a++) {
@@ -194,6 +211,7 @@ int find_best_forward_action(State s) {
 }
 
 int find_best_backward_action(State s) {
+    //finds action with highest reward
     int best_action = 0;
     float best = -9999;
     for (int a = 0; a < total_actions; a++) {
@@ -217,37 +235,19 @@ void loop() {
   if (millis() - lastServoTime >= 750) {
     lastServoTime = millis();
 
-    // Check if 5 minutes passed
-    if (millis() - trainingStart >= trainingTime * 60UL * 1000UL) {
-      Serial.print("----------------------------------------------------------------------------------------millis:    "); 
-      Serial.println(millis()); Serial.print(15UL * 60UL * 1000UL);Serial.print("   is lesser than  : ");Serial.print(millis() - trainingStart);
-      training = false;
-    }
+    int action = PolicyEpsilon(state, epsilon);
+    if (epsilon > epsilon_min) epsilon *= epsilon_decay;
 
-    if (training) {
-      // --- TRAINING ---
-      int action = PolicyRandom();
+    StepStruct step = Step(state, action);
 
-      StepStruct step = Step(state, action);
+    State nextState = step.nextState;  
 
-      State nextState = step.nextState;  
+    int next_action = forward ? find_best_forward_action(nextState) : find_best_backward_action(nextState);
 
-      int next_action = forward ? find_best_forward_action(nextState) : find_best_backward_action(nextState);
-  
-      Q[action][state.row][state.col] += learn_rate * (step.reward + discount_factor * Q[next_action][nextState.row][nextState.col] - Q[action][state.row][state.col]);
-      Serial.print("training in progress. Q table updated.  "); Serial.print((trainingTime * 60UL * 1000UL - (millis() - trainingStart)) / 60000UL); Serial.println("  minutes left");
-      state = nextState;
-      Serial.print("Ram left:   "); Serial.println(freeRam());
+    Q[action][state.row][state.col] += learn_rate * (step.reward + discount_factor * Q[next_action][nextState.row][nextState.col] - Q[action][state.row][state.col]);
+    state = nextState;
 
-    } else {
-      // --- GREEDY POLICY ---
-      int best_action = forward ? find_best_forward_action(state) : find_best_backward_action(state);
-
-      StepStruct step = Step(state, best_action);
-      state = step.nextState;
-      Serial.println("Executing greedy policy  ");
-      Serial.print("Ram left:   "); Serial.println(freeRam());
-    }
+    Serial.print("epsilon:  "); Serial.println(epsilon);
   }
 }
 
