@@ -15,8 +15,8 @@ int ms_delay_to_capture_accel = 50;
 
 
 //state space and action space definition
-constexpr int primary_arm_discrete_positions = 4;  //clipped between 15 and 90 degree
-constexpr int secondary_arm_discete_positions = 7;  //clipped between 20 and 170 degree
+constexpr int primary_arm_discrete_positions = 7;  //clipped between 15 and 90 degree . Allowed positions: [2, 3, 4, 6, 7, 10, 11, 16, 19, 31, 46, 91]
+constexpr int secondary_arm_discete_positions = 10;  //clipped between 20 and 170 degree. Allowed positions: [2, 3, 4, 5, 6, 7, 10, 11, 13, 16, 19, 21, 31, 37, 46, 61, 91, 181]
 constexpr int total_actions = primary_arm_discrete_positions + secondary_arm_discete_positions;
 
 //Q stuff
@@ -30,6 +30,9 @@ unsigned long trainingStart = 0;
 unsigned long trainingTime = 7;
 
 bool forward = false;
+
+//stuff from pc stuff
+String command;
 
 
 struct State {
@@ -63,7 +66,7 @@ void setup() {
   
   
 
-  initialState = {random(0, 7), random(0, 4)};
+  initialState = {random(0, secondary_arm_discete_positions), random(0, primary_arm_discrete_positions)};
   
   Serial.print("Row: "); Serial.println(initialState.row);
   Serial.print("Col: "); Serial.println(initialState.col);
@@ -92,7 +95,7 @@ void setup() {
 }
 
 int PolicyRandom() {
-  return random(0, total_actions);
+  return random(0, total_actions); //generates between 0 and total_actions - 1
 }
 
 StepStruct Step(State currentState, int action ) {
@@ -104,7 +107,7 @@ StepStruct Step(State currentState, int action ) {
     servoPosition = ConvertStateToServoPosition(result.nextState);
 
     servo_primary.write(servoPosition.primaryArmPosition);
-    Serial.print("Moved PRIMARY ARM to  --- "); Serial.println(servoPosition.primaryArmPosition);
+    //Serial.print("Moved PRIMARY ARM to  --- "); Serial.println(servoPosition.primaryArmPosition);
     delay(ms_delay_to_capture_accel);
     result.reward = Reward();
   }
@@ -114,7 +117,7 @@ StepStruct Step(State currentState, int action ) {
     
     
     servo_secondary.write(servoPosition.secondaryArmPosition);
-    Serial.print("Moved secondary arm to  :   "); Serial.println(servoPosition.secondaryArmPosition);
+    //Serial.print("Moved secondary arm to  :   "); Serial.println(servoPosition.secondaryArmPosition);
 
     delay(ms_delay_to_capture_accel);
     result.reward = Reward();
@@ -207,6 +210,10 @@ int find_best_backward_action(State s) {
 
 
 void loop() {
+  //receiving data from pc
+  if (Serial.available() > 0) {
+    command = Serial.readStringUntil('\n');
+  }
 
   // Update pitch every 1ms
   if (millis() - lastPitchTime >= 1) {
@@ -219,21 +226,60 @@ void loop() {
 
     // Check if 5 minutes passed
     if (millis() - trainingStart >= trainingTime * 60UL * 1000UL) {
-      Serial.print("----------------------------------------------------------------------------------------millis:    "); 
-      Serial.println(millis()); Serial.print(15UL * 60UL * 1000UL);Serial.print("   is lesser than  : ");Serial.print(millis() - trainingStart);
+      //Serial.print("----------------------------------------------------------------------------------------millis:    "); 
+      //Serial.println(millis()); Serial.print(15UL * 60UL * 1000UL);Serial.print("   is lesser than  : ");Serial.print(millis() - trainingStart);
       training = false;
     }
 
+    
     if (training) {
       // --- TRAINING ---
-      int action = PolicyRandom();
 
-      StepStruct step = Step(state, action);
+      //requesting action
+      Serial.print("ACTION_REQUEST:");
+      
+      //int action = PolicyRandom();//stuff that must happen in python
+
+      int action = 0; 
+      
+      if (command.startsWith("Action:")) {
+          action = command.substring(7).toInt();
+          Serial.print("DEBUG: Action set to: ");
+          Serial.println(action);
+      } else {
+          Serial.println("DEBUG: Command doesn't start with Action:");
+      }
+      
+
+      Serial.print("DEBUG: Using action: ");
+      Serial.println(action);
+
+      StepStruct step = Step(state, action); //stuff that must happen here:
 
       State nextState = step.nextState;  
 
       int next_action = forward ? find_best_forward_action(nextState) : find_best_backward_action(nextState);
-  
+
+      //sending data to pc
+      Serial.print("PROCESS_DATA:");
+
+      Serial.print("state_row:");
+      Serial.print(state.row);
+
+      Serial.print("state_col:");
+      Serial.print(state.col);
+
+      Serial.print("step_reward:");
+      Serial.print(step.reward);
+
+      Serial.print("next_state_row:");
+      Serial.print(nextState.row);
+
+      Serial.print("next_state_col:");
+      Serial.println(nextState.col);
+
+
+
       Q[action][state.row][state.col] += learn_rate * (step.reward + discount_factor * Q[next_action][nextState.row][nextState.col] - Q[action][state.row][state.col]);
       Serial.print("training in progress. Q table updated.  "); Serial.print((trainingTime * 60UL * 1000UL - (millis() - trainingStart)) / 60000UL); Serial.println("  minutes left");
       state = nextState;
@@ -243,7 +289,7 @@ void loop() {
       // --- GREEDY POLICY ---
       int best_action = forward ? find_best_forward_action(state) : find_best_backward_action(state);
 
-      StepStruct step = Step(state, best_action);
+      StepStruct step = Step(state, best_action); //stuff that must happen here
       state = step.nextState;
       Serial.println("Executing greedy policy  ");
       Serial.print("Ram left:   "); Serial.println(freeRam());
