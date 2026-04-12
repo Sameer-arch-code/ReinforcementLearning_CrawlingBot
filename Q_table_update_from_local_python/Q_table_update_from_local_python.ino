@@ -15,19 +15,19 @@ int ms_delay_to_capture_accel = 50;
 
 
 //state space and action space definition
-constexpr int primary_arm_discrete_positions = 7;  //clipped between 15 and 90 degree . Allowed positions: [2, 3, 4, 6, 7, 10, 11, 16, 19, 31, 46, 91]
-constexpr int secondary_arm_discete_positions = 10;  //clipped between 20 and 170 degree. Allowed positions: [2, 3, 4, 5, 6, 7, 10, 11, 13, 16, 19, 21, 31, 37, 46, 61, 91, 181]
+constexpr int primary_arm_discrete_positions = 16;  //clipped between 15 and 90 degree . Allowed positions: [2, 3, 4, 6, 7, 10, 11, 16, 19, 31, 46, 91]
+constexpr int secondary_arm_discete_positions = 19;  //clipped between 20 and 170 degree. Allowed positions: [2, 3, 4, 5, 6, 7, 10, 11, 13, 16, 19, 21, 31, 37, 46, 61, 91, 181]
 constexpr int total_actions = primary_arm_discrete_positions + secondary_arm_discete_positions;
 
 //Q stuff
-float Q[total_actions][secondary_arm_discete_positions][primary_arm_discrete_positions] = {0.0};//the Q table defined as [layer][row][col]
+//float Q[total_actions][secondary_arm_discete_positions][primary_arm_discrete_positions] = {0.0};//the Q table defined as [layer][row][col]
 float discount_factor = 0.9; // discount factor
 float learn_rate = 0.01; //learn rate
 
 //training stuff
 bool training = true;
 unsigned long trainingStart = 0;  
-unsigned long trainingTime = 7;
+unsigned long trainingTime = 15;
 
 bool forward = false;
 
@@ -184,29 +184,29 @@ int freeRam() {
   return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval);
 }
 
-int find_best_forward_action(State s) {
-    int best_action = 0;
-    float best = 9999;
-    for (int a = 0; a < total_actions; a++) {
-        if (Q[a][s.row][s.col] < best) {
-            best = Q[a][s.row][s.col];
-            best_action = a;
-        }
-    }
-    return best_action;
-}
+// int find_best_forward_action(State s) {
+//     int best_action = 0;
+//     float best = 9999;
+//     for (int a = 0; a < total_actions; a++) {
+//         if (Q[a][s.row][s.col] < best) {
+//             best = Q[a][s.row][s.col];
+//             best_action = a;
+//         }
+//     }
+//     return best_action;
+// }
 
-int find_best_backward_action(State s) {
-    int best_action = 0;
-    float best = -9999;
-    for (int a = 0; a < total_actions; a++) {
-        if (Q[a][s.row][s.col] > best) {
-            best = Q[a][s.row][s.col];
-            best_action = a;
-        }
-    }
-    return best_action;
-}
+// int find_best_backward_action(State s) {
+//     int best_action = 0;
+//     float best = -9999;
+//     for (int a = 0; a < total_actions; a++) {
+//         if (Q[a][s.row][s.col] > best) {
+//             best = Q[a][s.row][s.col];
+//             best_action = a;
+//         }
+//     }
+//     return best_action;
+// }
 
 
 void loop() {
@@ -258,7 +258,7 @@ void loop() {
 
       State nextState = step.nextState;  
 
-      int next_action = forward ? find_best_forward_action(nextState) : find_best_backward_action(nextState);
+      //int next_action = forward ? find_best_forward_action(nextState) : find_best_backward_action(nextState);
 
       //sending data to pc
       Serial.print("PROCESS_DATA:");
@@ -280,14 +280,27 @@ void loop() {
 
 
 
-      Q[action][state.row][state.col] += learn_rate * (step.reward + discount_factor * Q[next_action][nextState.row][nextState.col] - Q[action][state.row][state.col]);
+      //Q[action][state.row][state.col] += learn_rate * (step.reward + discount_factor * Q[next_action][nextState.row][nextState.col] - Q[action][state.row][state.col]);
       Serial.print("training in progress. Q table updated.  "); Serial.print((trainingTime * 60UL * 1000UL - (millis() - trainingStart)) / 60000UL); Serial.println("  minutes left");
       state = nextState;
       Serial.print("Ram left:   "); Serial.println(freeRam());
 
-    } else {
+     } else {
       // --- GREEDY POLICY ---
-      int best_action = forward ? find_best_forward_action(state) : find_best_backward_action(state);
+      //int best_action = forward ? find_best_forward_action(state) : find_best_backward_action(state);
+
+      //requesting action
+      Serial.print("GREEDY_ACTION_REQUEST:");
+
+      int best_action = 0; 
+      
+      if (command.startsWith("GreedyAction:")) {
+          best_action = command.substring(13).toInt();
+          Serial.print("DEBUG: Action set to: ");
+          Serial.println(best_action);
+      } else {
+          Serial.println("DEBUG: Command doesn't start with Action:");
+      }
 
       StepStruct step = Step(state, best_action); //stuff that must happen here
       state = step.nextState;
