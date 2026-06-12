@@ -2,6 +2,7 @@
   #include <Adafruit_Sensor.h>
   #include <Wire.h>
   #include <Servo.h>
+  #include <EEPROM.h>
 
   Adafruit_MPU6050 mpu;
   Servo servo_primary;
@@ -27,7 +28,7 @@
   //training stuff
   bool training = true;
   unsigned long trainingStart = 0;  
-  unsigned long trainingTime = 10;
+  unsigned long trainingTime = 20;
 
   bool forward = true;
 
@@ -87,6 +88,7 @@
     lastServoTime = millis();
     trainingStart = millis();
     Serial.print("trainingStart: "); Serial.println(trainingStart);
+    loadQTable();  // Load saved Q-table if available
 
     
   }
@@ -221,6 +223,9 @@
       if (millis() - trainingStart >= trainingTime * 60UL * 1000UL) {
         Serial.print("----------------------------------------------------------------------------------------millis:    "); 
         Serial.println(millis()); Serial.print(15UL * 60UL * 1000UL);Serial.print("   is lesser than  : ");Serial.print(millis() - trainingStart);
+        if (training) {  // Only save once
+        saveQTable();
+      }
         training = false;
       }
 
@@ -250,4 +255,26 @@
       }
     }
   }
+  void saveQTable() {
+  int address = 0;
+  float* ptr = (float*)Q;
+  int total_floats = total_actions * secondary_arm_discete_positions * primary_arm_discrete_positions;
+  
+  for (int i = 0; i < total_floats; i++) {
+    EEPROM.put(address, ptr[i]);
+    address += sizeof(float);
+  }
+  Serial.println("Q-table saved to EEPROM");
+}
+void loadQTable() {
+  int address = 0;
+  float* ptr = (float*)Q;
+  int total_floats = total_actions * secondary_arm_discete_positions * primary_arm_discrete_positions;
+  
+  for (int i = 0; i < total_floats; i++) {
+    EEPROM.get(address, ptr[i]);
+    address += sizeof(float);
+  }
+  Serial.println("Q-table loaded from EEPROM");
+}
 

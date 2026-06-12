@@ -15,8 +15,8 @@ int ms_delay_to_capture_accel = 50;
 
 
 //state space and action space definition
-constexpr int primary_arm_discrete_positions = 16;  //clipped between 15 and 90 degree . Allowed positions: [2, 3, 4, 6, 7, 10, 11, 16, 19, 31, 46, 91]
-constexpr int secondary_arm_discete_positions = 19;  //clipped between 20 and 170 degree. Allowed positions: [2, 3, 4, 5, 6, 7, 10, 11, 13, 16, 19, 21, 31, 37, 46, 61, 91, 181]
+constexpr int primary_arm_discrete_positions = 46;  //clipped between 15 and 90 degree . Allowed positions: [2, 3, 4, 6, 7, 10, 11, 16, 19, 31, 46, 91]
+constexpr int secondary_arm_discete_positions = 91;  //clipped between 20 and 170 degree. Allowed positions: [2, 3, 4, 5, 6, 7, 10, 11, 13, 16, 19, 21, 31, 37, 46, 61, 91, 181]
 constexpr int total_actions = primary_arm_discrete_positions + secondary_arm_discete_positions;
 
 //Q stuff
@@ -27,9 +27,9 @@ float learn_rate = 0.01; //learn rate
 //training stuff
 bool training = true;
 unsigned long trainingStart = 0;  
-unsigned long trainingTime = 15;
+unsigned long trainingTime = 10;
 
-bool forward = false;
+//bool forward = false;
 
 //stuff from pc stuff
 String command;
@@ -290,7 +290,15 @@ void loop() {
       //int best_action = forward ? find_best_forward_action(state) : find_best_backward_action(state);
 
       //requesting action
-      Serial.print("GREEDY_ACTION_REQUEST:");
+      //Serial.print("GREEDY_ACTION_REQUEST:");
+
+      Serial.print("PROCESS_EXECUTION_DATA:");
+
+      Serial.print("state_row:");
+      Serial.print(state.row);
+
+      Serial.print("state_col:");
+      Serial.print(state.col);
 
       int best_action = 0; 
       
@@ -298,14 +306,20 @@ void loop() {
           best_action = command.substring(13).toInt();
           Serial.print("DEBUG: Action set to: ");
           Serial.println(best_action);
+
+          StepStruct step = Step(state, best_action); //stuff that must happen here
+          state = step.nextState;
       } else {
-          Serial.println("DEBUG: Command doesn't start with Action:");
+          Serial.println("EXECUTION_DEBUG: Command doesn't start with Action:");
       }
 
-      StepStruct step = Step(state, best_action); //stuff that must happen here
-      state = step.nextState;
-      Serial.println("Executing greedy policy  ");
-      Serial.print("Ram left:   "); Serial.println(freeRam());
+      
+
+      
+
+
+      // Serial.println("Executing greedy policy  ");
+      // Serial.print("Ram left:   "); Serial.println(freeRam());
     }
   }
 }
